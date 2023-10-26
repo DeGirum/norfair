@@ -98,3 +98,20 @@ def warn_once(message):
     Write a warning message only once.
     """
     warn(message)
+
+
+#  for each row of a numpy matrix finds difference between its two smallest elements.
+def difference_between_smallest(matrix):
+    differences = []
+
+    for row in matrix:
+        # Use numpy's partition function to partially sort the array.
+        # This makes it efficient to retrieve the smallest and second smallest elements.
+        if len(row) > 1:
+            smallest_two = np.partition(row, 1)[:2]
+            diff = np.abs(smallest_two[1] - smallest_two[0])
+            differences.append(diff)
+        else:
+            differences.append(np.inf)
+
+    return differences
