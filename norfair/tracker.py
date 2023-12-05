@@ -12,7 +12,7 @@ from .distances import (
     get_distance_by_name,
 )
 from .filter import FilterFactory, OptimizedKalmanFilterFactory
-from .utils import validate_points
+from .utils import validate_points, difference_between_smallest
 
 
 class Tracker:
@@ -259,6 +259,31 @@ class Tracker:
 
         return self.get_active_objects()
 
+    def re_id(self, detection: "Detection") -> None:
+        """
+        Re-identifies a tracked object with the global_id that corresponds
+        to global_id in detection. Such tracked object receives object_name and object_id
+        from detection. If any other tracked object has such object_id,
+        it is declared as "unknown" object.
+        """
+        if detection.global_id is None:
+            return
+
+        reid_obj = None
+        other_obj = None
+        for obj in self.tracked_objects:
+            if obj.global_id == detection.global_id:
+                reid_obj = obj
+            if obj.object_id == detection.object_id:
+                other_obj = obj
+
+        if reid_obj is not None:
+            reid_obj.object_name = detection.object_name
+            reid_obj.object_id = detection.object_id
+            if other_obj is not None and other_obj != reid_obj:
+                other_obj.label = "unknown"
+                other_obj.object_id = ""
+
     @property
     def current_object_count(self) -> int:
         """Number of active TrackedObjects"""
@@ -301,6 +326,9 @@ class Tracker:
 
             # Used just for debugging distance function
             if distance_matrix.any():
+                for i, dist2other in enumerate(difference_between_smallest(distance_matrix.T)):
+                    objects[i].set_tracking_score(dist2other)
+
                 for i, minimum in enumerate(distance_matrix.min(axis=0)):
                     objects[i].current_min_distance = (
                         minimum if minimum < distance_threshold else None
@@ -512,6 +540,8 @@ class TrackedObject:
         if not self.is_initializing:
             self._acquire_ids()
 
+        self.tracking_score = 0.  # How sure we are about this object id
+
         if initial_detection.scores is None:
             self.detected_at_least_once_points = np.array([True] * self.num_points)
         else:
@@ -532,6 +562,8 @@ class TrackedObject:
         self.filter = filter_factory.create_filter(initial_detection.absolute_points)
         self.dim_z = self.dim_points * self.num_points
         self.label = initial_detection.label
+        self.object_name = initial_detection.object_name
+        self.object_id = initial_detection.object_id
         self.abs_to_rel = None
         if coord_transformations is not None:
             self.update_coordinate_transformation(coord_transformations)
@@ -545,8 +577,14 @@ class TrackedObject:
         self.hit_counter -= 1
         self.point_hit_counter -= 1
         self.age += 1
+        # Set tracking score as max for now, it can be decreased in set_tracking_score
+        self.tracking_score = 1.
         # Advances the tracker's state
         self.filter.predict()
+
+    def set_tracking_score(self, dist2other):
+        if dist2other < self.detection_threshold:
+            self.tracking_score = 0.
 
     @property
     def hit_counter_is_positive(self):
@@ -767,6 +805,13 @@ class Detection:
         tracked objects with new detections. Label's type must be hashable for drawing purposes.
     embedding : Any, optional
         The embedding for the reid_distance.
+    global_id : int, optional
+        The global_id of TrackedObject, where this Detection belongs
+    object_name:
+        Name of tracked object
+    object_id: str, optional
+        Unique id of detected object
+
     """
 
     def __init__(
@@ -776,6 +821,10 @@ class Detection:
         data: Any = None,
         label: Hashable = None,
         embedding=None,
+        global_id: int = None,
+        object_name: str = None,
+        object_id: str = None,
+
     ):
         self.points = validate_points(points)
         self.scores = scores
@@ -784,6 +833,10 @@ class Detection:
         self.absolute_points = self.points.copy()
         self.embedding = embedding
         self.age = None
+        self.global_id = global_id
+        self.object_name = object_name
+        self.object_id = object_id
+
 
     def update_coordinate_transformation(
         self, coordinate_transformation: CoordinatesTransformation

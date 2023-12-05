@@ -128,6 +128,42 @@ def test_moving(filter_factory):
 @pytest.mark.parametrize(
     "filter_factory", [FilterPyKalmanFilterFactory(), OptimizedKalmanFilterFactory()]
 )
+def test_re_id(filter_factory):
+    #
+    # Test a simple case of a moving object
+    #
+    tracker = Tracker(
+        "euclidean",
+        initialization_delay=3,
+        distance_threshold=100,
+        filter_factory=filter_factory,
+    )
+
+    _object_name = "test_object"
+    _object_id = "ffff"
+
+    tracker.update([Detection(points=np.array([[1, 1]]))])
+    tracker.update([Detection(points=np.array([[1, 2]]))])
+    tracker.update([Detection(points=np.array([[1, 3]]))])
+    tracked_objects = tracker.update([Detection(points=np.array([[1, 4]]))])
+    assert len(tracked_objects) == 1
+    reid_detection = Detection(points=np.array([[1, 3]]),
+                               global_id=tracked_objects[0].global_id,
+                               object_name=_object_name,
+                               object_id=_object_id)
+    tracker.update([Detection(points=np.array([[1, 4]]))])
+    # Provide "async" detection to re_id function
+    tracker.re_id(reid_detection)
+    # Update tracker with a regular detection
+    tracked_objects = tracker.update([Detection(points=np.array([[1, 5]]))])
+
+    # check that the tracked object has the proper name and id
+    assert tracked_objects[0].object_name == _object_name
+    assert tracked_objects[0].object_id == _object_id
+
+@pytest.mark.parametrize(
+    "filter_factory", [FilterPyKalmanFilterFactory(), OptimizedKalmanFilterFactory()]
+)
 def test_distance_t(filter_factory):
     #
     # Test a moving object with a small distance threshold
