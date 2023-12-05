@@ -274,15 +274,15 @@ class Tracker:
         for obj in self.tracked_objects:
             if obj.global_id == detection.global_id:
                 reid_obj = obj
-            if obj.object_id == detection.object_id:
+            if obj.id == detection.object_id:
                 other_obj = obj
 
         if reid_obj is not None:
             reid_obj.object_name = detection.object_name
-            reid_obj.object_id = detection.object_id
+            reid_obj.id = detection.object_id
             if other_obj is not None and other_obj != reid_obj:
                 other_obj.label = "unknown"
-                other_obj.object_id = ""
+                other_obj.id = other_obj.global_id
 
     @property
     def current_object_count(self) -> int:
@@ -563,7 +563,7 @@ class TrackedObject:
         self.dim_z = self.dim_points * self.num_points
         self.label = initial_detection.label
         self.object_name = initial_detection.object_name
-        self.object_id = initial_detection.object_id
+        # self.object_id = initial_detection.object_id
         self.abs_to_rel = None
         if coord_transformations is not None:
             self.update_coordinate_transformation(coord_transformations)
